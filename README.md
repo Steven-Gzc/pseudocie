@@ -15,6 +15,8 @@ A Python-based interpreter for CIE A-Level Computer Science pseudocode, designed
 
 For the complete official specification, refer to the [CIE 9618 Pseudocode Guide for Teachers](697401-2026-pseudocode-guide-for-teachers.pdf).
 
+**Disclaimer**: This project is not affiliated with, endorsed by, or connected to Cambridge International Education. It is an independent educational tool created for learning purposes.
+
 ## Features
 
 Currently supported pseudocode features:
