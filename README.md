@@ -33,7 +33,7 @@ Currently supported pseudocode features:
 
 1. Clone this repository:
 ```bash
-git clone [<repository-url>](https://github.com/Steven-Gzc/cie_pseudocode_interpreter.git)
+git clone https://github.com/Steven-Gzc/cie_pseudocode_interpreter.git
 cd cie_pseudocode_interpreter
 ```
 
