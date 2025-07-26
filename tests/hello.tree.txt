@@ -1,0 +1,13 @@
+start
+  statement
+    var_decl
+      s
+      STRING
+  statement
+    assign
+      s
+      literal	"Hello World!"
+  statement
+    io_stmt
+      output
+        output_list	s

@@ -17,14 +17,17 @@ class Evaluator(Visitor):
     # ---------------------------------------------------------------------
 
     def var_decl(self, tree: Tree):
+        # Expect pattern: IDENT, TYPE (':' token is dropped by grammar)
         ident_token: Token = tree.children[0]
-        name = ident_token.value
-        self.env.var_decl(name)
+        type_token: Token = tree.children[1]
+        self.env.var_decl(ident_token.value, type_token.value, None)
 
     def const_decl(self, tree: Tree):
         ident_token: Token = tree.children[0]
-        name = ident_token.value
-        self.env.const_decl(name)
+        expr_tree: Tree | Token = tree.children[1]
+        value = self.eval_expr(expr_tree)
+        self.env.const_decl(ident_token.value, value) 
+
 
     def assign(self, tree: Tree):
         # Pattern: IDENT ARROW expr (arrow token is ignored)
@@ -33,6 +36,7 @@ class Evaluator(Visitor):
         expr_tree: Tree | Token = tree.children[-1]  # last child is the expression
         value = self.eval_expr(expr_tree)
         self.env.set(name, value)
+        # TODO: check type of variable and value
 
     # I/O ------------------------------------------------------------------
 
@@ -40,14 +44,32 @@ class Evaluator(Visitor):
         name_token: Token = tree.children[0]
         name = name_token.value
         user_val = input(f"INPUT {name}: ")
-        # Auto-cast simple types (int, float) otherwise string
-        if user_val.isdigit():
-            cast_val: object = int(user_val)
-        else:
+        expected_type = self.env.get_type(name)
+
+        def _cast(val: str, t: str):
             try:
-                cast_val = float(user_val)
+                if t == "INTEGER":
+                    return int(val)
+                if t == "REAL":
+                    return float(val)
+                if t == "BOOLEAN":
+                    if val.strip().upper() in {"TRUE", "FALSE"}:
+                        return val.strip().upper() == "TRUE"
+                    raise ValueError
+                if t == "CHAR":
+                    if len(val) != 1:
+                        raise ValueError
+                    return val
             except ValueError:
-                cast_val = user_val
+                raise ValueError(f"Cannot convert '{val}' to {t}") from None
+            return val  # STRING / DATE and default
+
+        cast_val: object
+        try:
+            cast_val = _cast(user_val, expected_type)
+        except ValueError as exc:
+            print(exc)
+            return
         self.env.set(name, cast_val)
 
     def output(self, tree: Tree):
@@ -131,7 +153,7 @@ class Evaluator(Visitor):
         if var_name in self.env:
             self.env.set(var_name, idx)
         else:
-            self.env.declare(var_name, idx)
+            self.env.var_decl(var_name, idx)
 
         # Loop execution
         def continue_condition(current: int | float) -> bool:
