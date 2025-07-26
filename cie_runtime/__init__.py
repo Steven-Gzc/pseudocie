@@ -1,4 +1,10 @@
-from .environment import Environment
-from .evaluator import Evaluator
+"""Runtime package for CIE A-Level pseudocode interpreter."""
 
-__all__ = ["Environment", "Evaluator"] 
+from .environment import Environment
+from .evaluator import Evaluator, run
+
+__all__ = [
+    "Environment",
+    "Evaluator",
+    "run",
+] 

@@ -1,3 +1,0 @@
-DECLARE x : INTEGER
-x <- 5
-OUTPUT x

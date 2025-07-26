@@ -32,12 +32,7 @@ assignment: IDENT ("←" | "<-") expr                -> assign
 ?compare_expr: arith_expr comp_op arith_expr -> compare
             | arith_expr
 
-comp_op     : ">"  -> larger
-| "<" -> smaller
-| ">=" -> largerequal
-| "<=" -> smallerequal
-| "=" -> equal
-| "<>" -> notequal
+comp_op     : ">"  | "<" | ">=" | "<=" | "=" | "<>" 
 
 ?arith_expr : arith_expr "+" term              -> add
             | arith_expr "-" term              -> sub

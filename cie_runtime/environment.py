@@ -1,127 +1,94 @@
+"""Environment abstraction used by the pseudocode interpreter.
+
+Keeping this layer separate makes it easier to plug-in features such as:
+    * type checking / coercion
+    * persistent program state (e.g., save / restore)
+    * dependency injection for I/O in unit tests
+
+For now it is a very thin wrapper around two dictionaries.
+"""
 from __future__ import annotations
 
-import re
 from typing import Any, Dict
 
 
+class RuntimeError(Exception):
+    """Base-class for runtime-level errors."""
+
+
+class VariableAlreadyDeclared(RuntimeError):
+    """Raised when attempting to redeclare an identifier."""
+
+
+class VariableNotDeclared(RuntimeError):
+    """Raised when an identifier is used before being declared."""
+
+
+class ConstantRedefinition(RuntimeError):
+    """Raised when attempting to assign to a constant."""
+
+
 class Environment:
-    """Variable/constant storage with simple type checking."""
+    """Mutable mapping holding variables and constants for a program run."""
 
-    _TYPE_MAP = {
-        "INTEGER": int,
-        "REAL": float,
-        "STRING": str,
-        "BOOLEAN": bool,
-        "CHAR": str,
-        "DATE": str,
-        "const": object,
-    }
-
-    def __init__(self, parent: "Environment | None" = None):
-        # Each entry: {"type": TYPE_NAME or 'const', "value": object}
-        self._store: Dict[str, Dict[str, Any]] = {}
-        self.parent = parent
+    def __init__(self) -> None:
+        self._vars: Dict[str, Any] = {}
+        self._consts: Dict[str, Any] = {}
+        self._types: Dict[str, str] = {}
 
     # ------------------------------------------------------------------
-    # Declarations
+    # Declaration helpers
     # ------------------------------------------------------------------
 
-    def var_decl(self, name: str, type_name: str, value: Any | None = None) -> None:
-        if name in self._store:
-            raise NameError(f"Variable '{name}' already declared in this scope")
-        self._assert_valid_type_name(type_name)
-        if value is not None and not self._value_matches_type(value, type_name):
-            raise TypeError(
-                f"Initial value for '{name}' does not match declared type {type_name}"
-            )
-        self._store[name] = {"type": type_name, "value": value}
+    def declare_var(self, name: str, type_str: str) -> None:
+        """Declare a variable *name* of *type_str* (e.g. ``INTEGER``)."""
+        key = name.upper()
+        if key in self:
+            raise VariableAlreadyDeclared(f"Identifier '{name}' already declared.")
+        self._vars[key] = None
+        self._types[key] = type_str.upper()
 
-    def const_decl(self, name: str, value: Any) -> None:
-        if name in self._store:
-            raise NameError(f"Constant '{name}' already declared in this scope")
-        # Constants are marked by special type 'const'.
-        self._store[name] = {"type": "const", "value": value}
+    def define_const(self, name: str, value: Any) -> None:
+        """Create a constant *name* bound to *value*."""
+        key = name.upper()
+        if key in self:
+            raise VariableAlreadyDeclared(f"Identifier '{name}' already declared.")
+        self._consts[key] = value
 
     # ------------------------------------------------------------------
-    # Lookup helpers
+    # Get / set
     # ------------------------------------------------------------------
+
+    def set_var(self, name: str, value: Any) -> None:
+        key = name.upper()
+        if key in self._consts:
+            raise ConstantRedefinition(f"Cannot re-assign to constant '{name}'.")
+        if key not in self._vars:
+            raise VariableNotDeclared(f"Variable '{name}' has not been declared.")
+        self._vars[key] = value
 
     def get(self, name: str) -> Any:
-        entry = self._lookup_entry(name)
-        return entry["value"]
-
-    def get_type(self, name: str) -> str:
-        entry = self._lookup_entry(name)
-        return entry["type"]
-
-    # ------------------------------------------------------------------
-    # Mutation
-    # ------------------------------------------------------------------
-
-    def set(self, name: str, value: Any) -> None:
-        entry = self._lookup_entry(name)
-        entry_type = entry["type"]
-        if entry_type == "const":
-            raise TypeError(f"Cannot assign to constant '{name}'")
-        expected_type = entry_type
-        if not self._value_matches_type(value, expected_type):
-            raise TypeError(
-                f"Type mismatch for '{name}': expected {expected_type}, got {type(value).__name__}"
-            )
-        entry["value"] = value
+        key = name.upper()
+        if key in self._consts:
+            return self._consts[key]
+        if key in self._vars:
+            return self._vars[key]
+        raise VariableNotDeclared(f"Identifier '{name}' has not been declared.")
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # Magic methods
     # ------------------------------------------------------------------
 
-    def _lookup_entry(self, name: str) -> Dict[str, Any]:
-        if name in self._store:
-            return self._store[name]
-        if self.parent is not None:
-            return self.parent._lookup_entry(name)  # noqa: SLF001
-        raise NameError(f"Variable '{name}' is not declared")
+    def __contains__(self, name: str) -> bool:  # type: ignore[override]
+        key = name.upper()
+        return key in self._vars or key in self._consts
 
-    @classmethod
-    def _assert_valid_type_name(cls, type_name: str) -> None:
-        if type_name not in cls._TYPE_MAP:
-            raise ValueError(f"Unsupported type '{type_name}'")
-
-    @classmethod
-    def _value_matches_type(cls, value: Any, type_name: str) -> bool:
-        if type_name == "const":
-            return True
-        py_type = cls._TYPE_MAP.get(type_name)
-        if py_type is None:
-            return True  # unknown types considered compatible
-        if type_name == "CHAR":
-            return isinstance(value, str) and len(value) == 1
-        if type_name == "REAL":
-            return isinstance(value, (int, float))
-        return isinstance(value, py_type)
-
-    @classmethod
-    def _infer_type_name(cls, value: Any) -> str:
-        if isinstance(value, bool):
-            return "BOOLEAN"
-        if isinstance(value, int):
-            return "INTEGER"
-        if isinstance(value, float):
-            return "REAL"
-        if isinstance(value, str):
-            return "STRING"
-        return "STRING"
-
-    def __contains__(self, item: str) -> bool:  # pragma: no cover
-        try:
-            self._lookup_entry(item)
-            return True
-        except NameError:
-            return False
-
-    def __repr__(self) -> str:  # pragma: no cover
-        scopes = []
-        env: Environment | None = self
-        while env is not None:
-            scopes.append({k: v["value"] for k, v in env._store.items()})
-            env = env.parent
-        return " -> ".join(repr(s) for s in scopes) 
+    # Helpful for debugging / REPL visualisation
+    def __repr__(self) -> str:  # noqa: D401 – prefer concise repr
+        parts = [
+            "Variables:" if self._vars else "No variables.",
+            *(f"  {k} = {v!r}" for k, v in self._vars.items()),
+            "Constants:" if self._consts else "No constants.",
+            *(f"  {k} = {v!r}" for k, v in self._consts.items()),
+        ]
+        return "\n".join(parts) 
