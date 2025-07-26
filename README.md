@@ -1,4 +1,4 @@
-# CIE Pseudocode Interpreter
+# pseudocie
 
 A Python-based interpreter for CIE A-Level Computer Science pseudocode, designed to parse and execute pseudocode programs following the Cambridge International Examinations 9618 specification. Built with Lark parser generator and an AST tree-walking interpreter.
 
@@ -33,8 +33,8 @@ Currently supported pseudocode features:
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/Steven-Gzc/cie_pseudocode_interpreter.git
-cd cie_pseudocode_interpreter
+git clone github.com/Steven-Gzc/pseudocie.git
+cd pseudocie
 ```
 
 2. Install dependencies (requires Python 3.8+):
@@ -67,7 +67,7 @@ python cli.py tests\hello.cie
 ## Project Structures
 
 ```
-cie_pseudocode_interpreter/
+pseudocie/
 ├── cli.py                 # Command-line interface
 ├── grammar.lark          # Lark grammar definition for CIE pseudocode
 ├── parse_utils.py        # Parsing utilities
