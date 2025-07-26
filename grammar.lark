@@ -32,7 +32,12 @@ assignment: IDENT ("←" | "<-") expr                -> assign
 ?compare_expr: arith_expr comp_op arith_expr -> compare
             | arith_expr
 
-comp_op     : ">"  | "<" | ">=" | "<=" | "=" | "<>" 
+comp_op     : ">"  -> larger
+            | "<" -> smaller
+            | ">=" -> largerequal
+            | "<=" -> smallerequal
+            | "=" -> equal
+            | "<>" -> notequal
 
 ?arith_expr : arith_expr "+" term              -> add
             | arith_expr "-" term              -> sub
@@ -78,13 +83,15 @@ literal: INT_LITERAL
 
 TYPE: "INTEGER"|"REAL"|"STRING"|"BOOLEAN"|"CHAR"|"DATE"
 
+// Boolean literals must come before IDENT to have higher priority
+BOOL_LITERAL: "TRUE" | "FALSE"
+
 IDENT: /[A-Za-z][A-Za-z0-9_]*/i
 
 INT_LITERAL: /-?\d+/
 REAL_LITERAL: /-?\d+\.\d+/
 CHAR_LITERAL: /'[^\\\n]'/
 STRING_LITERAL: /"([^"\\]|\\.)*"/
-BOOL_LITERAL: "TRUE" | "FALSE"
 DATE_LITERAL: /\d{2}\/\d{2}\/\d{4}/
 
 COMMENT: /\/\/[^\n]*/

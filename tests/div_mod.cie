@@ -1,0 +1,7 @@
+DECLARE Quotient : INTEGER
+DECLARE Remainder : INTEGER
+
+Quotient <- 17 DIV 5
+Remainder <- 17 MOD 5
+
+OUTPUT "Quotient:", Quotient, "Remainder:", Remainder 

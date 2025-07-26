@@ -1,2 +1,0 @@
-Total <- (X + Y * 3) DIV 2
-GameOver <- NOT (Lives > 0 OR TimeLeft <= 0)

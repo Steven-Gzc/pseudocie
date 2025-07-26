@@ -3,9 +3,13 @@ s <- "Hello World!"
 OUTPUT s
 
 DECLARE x : INTEGER
-x <- 5
+x <- 5 + 3
 OUTPUT "x equals:", x
 
 DECLARE a : REAL
-a <- 1.2
+a <- 1.2 / 4 * 5
 OUTPUT a 
+
+DECLARE b : BOOLEAN
+b <- TRUE AND FALSE
+OUTPUT b

@@ -91,7 +91,8 @@ class Evaluator(Transformer):
 
     def assign(self, items):  # noqa: D401
         ident, value = items
-        self.env.set_var(ident, value)
+        resolved_value = self.get_value(value)
+        self.env.set_var(ident, resolved_value)
 
     # ------------------------------------------------------------------
     # I/O
@@ -116,15 +117,20 @@ class Evaluator(Transformer):
     # ------------------------------------------------------------------
 
     def or_op(self, items):
-        a, b = items
+        """
+        OR operator
+        look up the values of items and return the result of the OR operation
+        """
+        a, b = self.get_value(items[0]), self.get_value(items[1])
         return a or b
 
     def and_op(self, items):
-        a, b = items
+        a, b = self.get_value(items[0]), self.get_value(items[1])
         return a and b
 
     def not_op(self, items):
-        return not items[0]
+        value = self.get_value(items[0])
+        return not value
 
     # ------------------------------------------------------------------
     # Comparisons
@@ -150,18 +156,19 @@ class Evaluator(Transformer):
 
     def compare(self, items):
         left, op, right = items
+        left_val, right_val = self.get_value(left), self.get_value(right)
         if op == ">":
-            return left > right
+            return left_val > right_val
         if op == "<":
-            return left < right
+            return left_val < right_val
         if op == ">=":
-            return left >= right
+            return left_val >= right_val
         if op == "<=":
-            return left <= right
+            return left_val <= right_val
         if op == "==":
-            return left == right
+            return left_val == right_val
         if op == "!=":
-            return left != right
+            return left_val != right_val
         raise ValueError(f"Unsupported comparison operator: {op}")
 
     # ------------------------------------------------------------------
@@ -169,25 +176,32 @@ class Evaluator(Transformer):
     # ------------------------------------------------------------------
 
     def add(self, items):
-        return items[0] + items[1]
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left + right
 
     def sub(self, items):
-        return items[0] - items[1]
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left - right
 
     def mul(self, items):
-        return items[0] * items[1]
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left * right
 
     def div(self, items):
-        return items[0] / items[1]
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left / right
 
     def int_div(self, items):  # noqa: D401 – matching rule name
-        return items[0] // items[1]
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left // right
 
     def mod(self, items):
-        return items[0] % items[1]
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left % right
 
     def neg(self, items):
-        return -items[0]
+        value = self.get_value(items[0])
+        return -value
 
     # ------------------------------------------------------------------
     # Factors / atoms
@@ -195,9 +209,15 @@ class Evaluator(Transformer):
 
     def atom(self, items):
         node = items[0]
-        if isinstance(node, str) and node.upper() in self.env:
-            return self.env.get(node)
-        return node
+        return self.get_value(node)
+
+    # ------------------------------------------------------------------
+    # Literals
+    # ------------------------------------------------------------------
+
+    def literal(self, items):  # noqa: D401 – rule name as in grammar
+        """Collapse the 'literal' rule to its contained Python value."""
+        return items[0]
 
     # ------------------------------------------------------------------
     # Root
@@ -211,11 +231,28 @@ class Evaluator(Transformer):
     # Helpers
     # ------------------------------------------------------------------
 
+    def get_value(self, identifier_or_value: Any) -> Any:
+        """Get the actual value from an identifier or return the value as-is.
+        
+        This function handles:
+        - Boolean literals (TRUE/FALSE) -> Python bool
+        - Variable identifiers -> their stored values
+        - Other values -> returned unchanged
+        """
+        if isinstance(identifier_or_value, str):
+            # Handle boolean literals
+            if identifier_or_value.upper() == "TRUE":
+                return True
+            elif identifier_or_value.upper() == "FALSE":
+                return False
+            # Handle variable lookup
+            elif identifier_or_value.upper() in self.env:
+                return self.env.get(identifier_or_value)
+        return identifier_or_value
+
     def _resolve(self, value: Any) -> Any:
-        """Turn identifiers into their runtime value (used by OUTPUT)."""
-        if isinstance(value, str) and value.upper() in self.env:
-            return self.env.get(value)
-        return value
+        """Turn identifiers into their runtime value(used by OUTPUT)."""
+        return self.get_value(value)
 
 
 # ----------------------------------------------------------------------

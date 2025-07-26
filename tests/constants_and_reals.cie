@@ -1,0 +1,7 @@
+CONSTANT PI = 3.14159
+DECLARE R : REAL
+DECLARE Circumference : REAL
+
+R <- 2.5
+Circumference <- 2 * PI * R
+OUTPUT "Circumference:", Circumference 

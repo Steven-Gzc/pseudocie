@@ -1,0 +1,55 @@
+start
+  statement
+    var_decl
+      A
+      BOOLEAN
+  statement
+    var_decl
+      B
+      BOOLEAN
+  statement
+    var_decl
+      Result
+      BOOLEAN
+  statement
+    assign
+      A
+      TRUE
+  statement
+    assign
+      B
+      FALSE
+  statement
+    assign
+      Result
+      or_op
+        A
+        B
+  statement
+    io_stmt
+      output
+        output_list	Result
+  statement
+    assign
+      Result
+      and_op
+        A
+        B
+  statement
+    io_stmt
+      output
+        output_list	Result
+  statement
+    assign
+      Result
+      or_op
+        and_op
+          A
+          not_op	B
+        and_op
+          B
+          A
+  statement
+    io_stmt
+      output
+        output_list	Result

@@ -1,0 +1,31 @@
+start
+  statement
+    const_decl
+      PI
+      literal	3.14159
+  statement
+    var_decl
+      R
+      REAL
+  statement
+    var_decl
+      Circumference
+      REAL
+  statement
+    assign
+      R
+      literal	2.5
+  statement
+    assign
+      Circumference
+      mul
+        mul
+          literal	2
+          PI
+        R
+  statement
+    io_stmt
+      output
+        output_list
+          literal	"Circumference:"
+          Circumference
