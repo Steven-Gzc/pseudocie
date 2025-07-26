@@ -11,3 +11,49 @@ start
     io_stmt
       output
         output_list	s
+  statement
+    var_decl
+      x
+      INTEGER
+  statement
+    assign
+      x
+      add
+        literal	5
+        literal	3
+  statement
+    io_stmt
+      output
+        output_list
+          literal	"x equals:"
+          x
+  statement
+    var_decl
+      a
+      REAL
+  statement
+    assign
+      a
+      mul
+        div
+          literal	1.2
+          literal	4
+        literal	5
+  statement
+    io_stmt
+      output
+        output_list	a
+  statement
+    var_decl
+      b
+      BOOLEAN
+  statement
+    assign
+      b
+      and_op
+        TRUE
+        FALSE
+  statement
+    io_stmt
+      output
+        output_list	b

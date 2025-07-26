@@ -1,0 +1,48 @@
+start
+  statement
+    var_decl
+      Total
+      INTEGER
+  statement
+    var_decl
+      X
+      INTEGER
+  statement
+    var_decl
+      Y
+      INTEGER
+  statement
+    var_decl
+      GameOver
+      BOOLEAN
+  statement
+    assign
+      X
+      literal	1
+  statement
+    assign
+      Y
+      literal	2
+  statement
+    assign
+      Total
+      int_div
+        add
+          X
+          mul
+            Y
+            literal	3
+        literal	2
+  statement
+    assign
+      GameOver
+      not_op
+        or_op
+          compare
+            literal	1
+            larger
+            literal	0
+          compare
+            literal	1
+            smallerequal
+            literal	0

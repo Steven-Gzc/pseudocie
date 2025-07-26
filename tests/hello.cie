@@ -2,10 +2,14 @@ DECLARE s : STRING
 s <- "Hello World!"
 OUTPUT s
 
-//DECLARE x : INTEGER
-//x <- 5
-//OUTPUT "x equals:", x
+DECLARE x : INTEGER
+x <- 5 + 3
+OUTPUT "x equals:", x
 
-//DECLARE a : REAL
-//a <- 1.2
-//OUTPUT a 
+DECLARE a : REAL
+a <- 1.2 / 4 * 5
+OUTPUT a 
+
+DECLARE b : BOOLEAN
+b <- TRUE AND FALSE
+OUTPUT b

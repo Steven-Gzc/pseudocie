@@ -1,0 +1,29 @@
+start
+  statement
+    var_decl
+      Quotient
+      INTEGER
+  statement
+    var_decl
+      Remainder
+      INTEGER
+  statement
+    assign
+      Quotient
+      int_div
+        literal	17
+        literal	5
+  statement
+    assign
+      Remainder
+      mod
+        literal	17
+        literal	5
+  statement
+    io_stmt
+      output
+        output_list
+          literal	"Quotient:"
+          Quotient
+          literal	"Remainder:"
+          Remainder

@@ -1,2 +1,13 @@
+DECLARE Total : INTEGER
+DECLARE X : INTEGER
+DECLARE Y : INTEGER
+DECLARE GameOver : BOOLEAN
+
+X <- 1
+Y <- 2
+
 Total <- (X + Y * 3) DIV 2
-GameOver <- NOT (Lives > 0 OR TimeLeft <= 0)
+GameOver <- NOT (1 > 0 OR 1 <= 0)
+
+OUTPUT Total
+OUTPUT GameOver

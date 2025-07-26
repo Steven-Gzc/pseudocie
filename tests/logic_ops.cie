@@ -1,0 +1,15 @@
+DECLARE A : BOOLEAN
+DECLARE B : BOOLEAN
+DECLARE Result : BOOLEAN
+
+A <- TRUE
+B <- FALSE
+
+Result <- A OR B
+OUTPUT Result
+
+Result <- A AND B
+OUTPUT Result
+
+Result <- (A AND NOT B) OR (B AND A)
+OUTPUT Result

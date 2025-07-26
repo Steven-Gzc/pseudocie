@@ -1,242 +1,266 @@
+"""AST interpreter that walks the Lark parse tree and executes a
+program written in CIE A-Level pseudocode.
+
+This is **not** a full implementation – it only covers what the provided
+`grammar.lark` currently understands:
+
+* variable / constant declarations
+* basic arithmetic & boolean expressions
+* assignment
+* simple INPUT / OUTPUT
+
+Nonetheless, it gives students a *runnable* sandbox they can tinker with
+while learning the language. The design purposefully keeps the public
+surface small so that future language constructs (e.g. control-flow,
+procedures, arrays) can slot in without breaking changes.
+"""
 from __future__ import annotations
 
-from lark import Token, Tree, Visitor
+from typing import Any, Callable
+
+from lark import Token, Transformer, Tree
 
 from .environment import Environment
 
 
-class Evaluator(Visitor):
-    """Walks the parse tree produced by *grammar.lark* and executes it."""
+class Evaluator(Transformer):
+    """Transform-based interpreter.
 
-    def __init__(self, env: Environment | None = None):
+    By subclassing ``lark.Transformer`` rather than ``Visitor`` we can
+    evaluate expressions *bottom-up*: each rule returns a Python value
+    that is immediately available to its parent rule.
+
+    Parameters
+    ----------
+    env : Environment | None, default None
+        Existing runtime mapping to mutate – useful for unit tests or
+        REPLs. A fresh one is created when *None*.
+    input_fn, output_fn : Callables, default built-ins
+        Abstractions over ``input`` / ``print`` so tests can mock I/O.
+    """
+
+    def __init__(
+        self,
+        env: Environment | None = None,
+        *,
+        input_fn: Callable[[str], str] = input,
+        output_fn: Callable[..., None] = print,
+    ) -> None:
         super().__init__()
-        self.env = env or Environment()
-
-    # ---------------------------------------------------------------------
-    # Statement handlers (rules are named via '->' in grammar)
-    # ---------------------------------------------------------------------
-
-    def var_decl(self, tree: Tree):
-        # Expect pattern: IDENT, TYPE (':' token is dropped by grammar)
-        ident_token: Token = tree.children[0]
-        type_token: Token = tree.children[1]
-        self.env.var_decl(ident_token.value, type_token.value, None)
-
-    def const_decl(self, tree: Tree):
-        ident_token: Token = tree.children[0]
-        expr_tree: Tree | Token = tree.children[1]
-        value = self.eval_expr(expr_tree)
-        self.env.const_decl(ident_token.value, value) 
-
-
-    def assign(self, tree: Tree):
-        # Pattern: IDENT ARROW expr (arrow token is ignored)
-        name_token: Token = tree.children[0]
-        name = name_token.value
-        expr_tree: Tree | Token = tree.children[-1]  # last child is the expression
-        value = self.eval_expr(expr_tree)
-        self.env.set(name, value)
-        # TODO: check type of variable and value
-
-    # I/O ------------------------------------------------------------------
-
-    def input(self, tree: Tree):  # noqa: D401  (imperative form)
-        name_token: Token = tree.children[0]
-        name = name_token.value
-        user_val = input(f"INPUT {name}: ")
-        expected_type = self.env.get_type(name)
-
-        def _cast(val: str, t: str):
-            try:
-                if t == "INTEGER":
-                    return int(val)
-                if t == "REAL":
-                    return float(val)
-                if t == "BOOLEAN":
-                    if val.strip().upper() in {"TRUE", "FALSE"}:
-                        return val.strip().upper() == "TRUE"
-                    raise ValueError
-                if t == "CHAR":
-                    if len(val) != 1:
-                        raise ValueError
-                    return val
-            except ValueError:
-                raise ValueError(f"Cannot convert '{val}' to {t}") from None
-            return val  # STRING / DATE and default
-
-        cast_val: object
-        try:
-            cast_val = _cast(user_val, expected_type)
-        except ValueError as exc:
-            print(exc)
-            return
-        self.env.set(name, cast_val)
-
-    def output(self, tree: Tree):
-        values: list[object] = []
-
-        def collect(node: Tree | Token):
-            if isinstance(node, Tree) and node.data == 'output_list':
-                for child in node.children:
-                    if isinstance(child, Token) and child.value == ',':
-                        continue
-                    collect(child)
-            else:
-                values.append(self.eval_expr(node))
-
-        for child in tree.children:
-            collect(child)
-
-        print(*values)
-
-    # Control flow ---------------------------------------------------------
-
-    def if_no_else(self, tree: Tree):
-        cond_tree = tree.children[0]
-        if self.eval_expr(cond_tree):
-            for stmt in tree.children[1:]:
-                self.visit(stmt)
-
-    def if_else(self, tree: Tree):
-        cond_tree = tree.children[0]
-        # The grammar produces THEN statements first until an 'ELSE' marker
-        # We detect the split by finding the Tree labeled 'else_block' if it exists,
-        # otherwise we approximate by half-splitting – good enough for skeleton.
-        then_block: list[Tree] = []
-        else_block: list[Tree] = []
-        in_else = False
-        for child in tree.children[1:]:
-            if isinstance(child, Token) and child.type == "ELSE":  # unlikely but safe-guard
-                in_else = True
-                continue
-            (else_block if in_else else then_block).append(child)
-        target_block = then_block if self.eval_expr(cond_tree) else else_block
-        for stmt in target_block:
-            self.visit(stmt)
-
-    def while_stmt(self, tree: Tree):
-        cond_tree = tree.children[0]
-        body = tree.children[1:]
-        while self.eval_expr(cond_tree):
-            for stmt in body:
-                self.visit(stmt)
-
-    def for_loop(self, tree: Tree):
-        """Execute a FOR loop. Children layout (tokens + subtrees):
-        IDENT, ARROW, start_expr, "TO", end_expr, ["STEP", step_expr], body..., "NEXT", IDENT
-        """
-        children = list(tree.children)
-
-        var_name = children[0].value  # IDENT
-
-        # Extract start & end expressions
-        start_expr = children[2]  # after ARROW token
-        end_expr_index = 4  # Ident (0), arrow (1), start (2), TO (3), end_expr (4)
-        end_expr = children[end_expr_index]
-
-        cursor = end_expr_index + 1  # points to token after end_expr
-
-        # Optional STEP
-        step = 1
-        if cursor < len(children) and isinstance(children[cursor], Token) and children[cursor].type == "STEP":
-            step_expr = children[cursor + 1]
-            step = self.eval_expr(step_expr)
-            cursor += 2
-
-        # The body is until the last "NEXT" token (penultimate child)
-        body = children[cursor:-2]  # skip "NEXT" and closing IDENT
-
-        idx = self.eval_expr(start_expr)
-        end_val = self.eval_expr(end_expr)
-
-        # Initialise loop variable
-        if var_name in self.env:
-            self.env.set(var_name, idx)
-        else:
-            self.env.var_decl(var_name, idx)
-
-        # Loop execution
-        def continue_condition(current: int | float) -> bool:
-            return (step > 0 and current <= end_val) or (step < 0 and current >= end_val)
-
-        while continue_condition(self.env.get(var_name)):
-            for stmt in body:
-                self.visit(stmt)
-            self.env.set(var_name, self.env.get(var_name) + step)
-
-    # ---------------------------------------------------------------------
-    # Expression evaluation (helper, not a grammar rule)
-    # ---------------------------------------------------------------------
-
-    def eval_expr(self, node: Tree | Token):  # noqa: C901 (complexity fine for skeleton)
-        if isinstance(node, Token):
-            match node.type:
-                case "NUMBER":
-                    return int(node) if node.value.isdigit() else float(node)
-                case "STRING":
-                    return node.value.strip("\"")
-                case "IDENT":
-                    return self.env.get(node.value)
-            raise ValueError(f"Unsupported token: {node}")
-
-        if not isinstance(node, Tree):
-            raise TypeError(f"Expected Tree/Token, got {type(node)}")
-
-        # Map node.data to operations
-        op = node.data
-        if op in {"add", "sub", "mul", "div", "int_div", "mod", "and_op", "or_op"}:
-            a = self.eval_expr(node.children[0])
-            b = self.eval_expr(node.children[1])
-            return {
-                "add": a + b,
-                "sub": a - b,
-                "mul": a * b,
-                "div": a / b,
-                "int_div": a // b,
-                "mod": a % b,
-                "and_op": bool(a) and bool(b),
-                "or_op": bool(a) or bool(b),
-            }[op]
-        if op == "compare":
-            if len(node.children) == 1:
-                return self.eval_expr(node.children[0])
-            left_val = self.eval_expr(node.children[0])
-            op_token = node.children[1]
-            right_val = self.eval_expr(node.children[2])
-            return self._compare_values(op_token, left_val, right_val)
-        if op == "neg":
-            return -self.eval_expr(node.children[0])
-        if op == "not_op":
-            return not self.eval_expr(node.children[0])
-        if op == "number":
-            return self.eval_expr(node.children[0])
-        if op in {"var", "string"}:
-            return self.eval_expr(node.children[0])
-
-        # Fallback: evaluate all children to force visiting
-        for child in node.children:
-            self.eval_expr(child)
-        return None
+        self.env: Environment = env or Environment()
+        self._input = input_fn
+        self._output = output_fn
 
     # ------------------------------------------------------------------
+    # Terminals – convert raw tokens into Python values
+    # ------------------------------------------------------------------
 
-    @staticmethod
-    def _compare_values(op_token: Token | Tree, a: object, b: object) -> bool:
-        """Return the result of a <op_token> b for the supported operators."""
-        if not isinstance(op_token, Token):
-            return False
-        op = op_token.value
-        match op:
-            case "=":
-                return a == b
-            case "<>":
-                return a != b
-            case "<":
-                return a < b
-            case ">":
-                return a > b
-            case "<=":
-                return a <= b
-            case ">=":
-                return a >= b
-        raise ValueError(f"Unknown comparator {op}") 
+    def IDENT(self, token: Token) -> str:  # noqa: N802 – lark convention
+        return str(token)
+
+    def INT_LITERAL(self, token: Token) -> int:  # noqa: N802
+        return int(token)
+
+    def REAL_LITERAL(self, token: Token) -> float:  # noqa: N802
+        return float(token)
+
+    def BOOL_LITERAL(self, token: Token) -> bool:  # noqa: N802
+        return token.lower() == "true"
+
+    def CHAR_LITERAL(self, token: Token) -> str:  # noqa: N802
+        return token[1:-1]  # strip surrounding single quotes
+
+    def STRING_LITERAL(self, token: Token) -> str:  # noqa: N802
+        return bytes(token[1:-1], "utf-8").decode("unicode_escape")
+
+    def DATE_LITERAL(self, token: Token) -> str:  # noqa: N802
+        # TODO: convert into datetime.date when DATE semantics are firmed up
+        return str(token)
+
+    # ------------------------------------------------------------------
+    # Declarations & Assignment
+    # ------------------------------------------------------------------
+
+    def var_decl(self, items):  # noqa: D401 – lark signature
+        ident, type_tok = items
+        self.env.declare_var(ident, str(type_tok))
+
+    def const_decl(self, items):  # noqa: D401
+        ident, value = items
+        self.env.define_const(ident, value)
+
+    def assign(self, items):  # noqa: D401
+        ident, value = items
+        resolved_value = self.get_value(value)
+        self.env.set_var(ident, resolved_value)
+
+    # ------------------------------------------------------------------
+    # I/O
+    # ------------------------------------------------------------------
+
+    def input(self, items):
+        ident: str = items[0]
+        user_value = self._input(f"INPUT {ident}: ")
+        # No automatic type coercion yet – stored as plain string
+        self.env.set_var(ident, user_value)
+
+    def output_list(self, items):
+        return items  # simply propagate list of values upwards
+
+    def output(self, items):
+        # items[0] is the list produced by output_list
+        resolved = [self._resolve(val) for val in items[0]]
+        self._output(*resolved)
+
+    # ------------------------------------------------------------------
+    # Boolean logic
+    # ------------------------------------------------------------------
+
+    def or_op(self, items):
+        """
+        OR operator
+        look up the values of items and return the result of the OR operation
+        """
+        a, b = self.get_value(items[0]), self.get_value(items[1])
+        return a or b
+
+    def and_op(self, items):
+        a, b = self.get_value(items[0]), self.get_value(items[1])
+        return a and b
+
+    def not_op(self, items):
+        value = self.get_value(items[0])
+        return not value
+
+    # ------------------------------------------------------------------
+    # Comparisons
+    # ------------------------------------------------------------------
+
+    def larger(self, _):
+        return ">"
+
+    def smaller(self, _):
+        return "<"
+
+    def largerequal(self, _):
+        return ">="
+
+    def smallerequal(self, _):
+        return "<="
+
+    def equal(self, _):
+        return "=="
+
+    def notequal(self, _):
+        return "!="
+
+    def compare(self, items):
+        left, op, right = items
+        left_val, right_val = self.get_value(left), self.get_value(right)
+        if op == ">":
+            return left_val > right_val
+        if op == "<":
+            return left_val < right_val
+        if op == ">=":
+            return left_val >= right_val
+        if op == "<=":
+            return left_val <= right_val
+        if op == "==":
+            return left_val == right_val
+        if op == "!=":
+            return left_val != right_val
+        raise ValueError(f"Unsupported comparison operator: {op}")
+
+    # ------------------------------------------------------------------
+    # Arithmetic
+    # ------------------------------------------------------------------
+
+    def add(self, items):
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left + right
+
+    def sub(self, items):
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left - right
+
+    def mul(self, items):
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left * right
+
+    def div(self, items):
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left / right
+
+    def int_div(self, items):  # noqa: D401 – matching rule name
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left // right
+
+    def mod(self, items):
+        left, right = self.get_value(items[0]), self.get_value(items[1])
+        return left % right
+
+    def neg(self, items):
+        value = self.get_value(items[0])
+        return -value
+
+    # ------------------------------------------------------------------
+    # Factors / atoms
+    # ------------------------------------------------------------------
+
+    def atom(self, items):
+        node = items[0]
+        return self.get_value(node)
+
+    # ------------------------------------------------------------------
+    # Literals
+    # ------------------------------------------------------------------
+
+    def literal(self, items):  # noqa: D401 – rule name as in grammar
+        """Collapse the 'literal' rule to its contained Python value."""
+        return items[0]
+
+    # ------------------------------------------------------------------
+    # Root
+    # ------------------------------------------------------------------
+
+    def start(self, items):  # noqa: D401 – lark root
+        # All side-effects already executed; returning env makes unit-tests easy
+        return self.env
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def get_value(self, identifier_or_value: Any) -> Any:
+        """Get the actual value from an identifier or return the value as-is.
+        
+        This function handles:
+        - Boolean literals (TRUE/FALSE) -> Python bool
+        - Variable identifiers -> their stored values
+        - Other values -> returned unchanged
+        """
+        if isinstance(identifier_or_value, str):
+            # Handle boolean literals
+            if identifier_or_value.upper() == "TRUE":
+                return True
+            elif identifier_or_value.upper() == "FALSE":
+                return False
+            # Handle variable lookup
+            elif identifier_or_value.upper() in self.env:
+                return self.env.get(identifier_or_value)
+        return identifier_or_value
+
+    def _resolve(self, value: Any) -> Any:
+        """Turn identifiers into their runtime value(used by OUTPUT)."""
+        return self.get_value(value)
+
+
+# ----------------------------------------------------------------------
+# Public helper
+# ----------------------------------------------------------------------
+
+def run(tree: Tree, *, env: Environment | None = None) -> Environment:
+    """Execute *tree* and return the populated :class:`Environment`."""
+    evaluator = Evaluator(env)
+    evaluator.transform(tree)
+    return evaluator.env 
